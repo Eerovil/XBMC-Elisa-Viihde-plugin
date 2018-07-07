@@ -161,17 +161,20 @@ def mainloop():
     except Exception as ve:
         __settings__.setSetting("refresh_token", "{}")
 
+        # Logging in with refresh_token failed, try with user/pass
+        username = __settings__.getSetting("username")
+        password = __settings__.getSetting("password")
+        elisa.login(username, password)
+        __settings__.setSetting(
+            "refresh_token", elisa.oauth_data['refresh_token'])
+
     if not elisa.islogged():
         dialog = xbmcgui.Dialog()
         ok = dialog.ok('XBMC', __language__(30003), __language__(30004))
         if ok == True:
             __settings__.openSettings(url=sys.argv[0])
 
-        username = __settings__.getSetting("username")
-        password = __settings__.getSetting("password")
-        elisa.login(username, password)
-        __settings__.setSetting(
-            "refresh_token", elisa.oauth_data['refresh_token'])
+
 
     params = get_params()
 
