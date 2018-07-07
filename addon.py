@@ -46,7 +46,7 @@ except ImportError as err:
 elisa = elisaviihde.elisaviihde(False)
 
 
-def create_name(prog_data):
+def create_name(prog_data, snippet):
     time_raw = prog_data["startTimeUTC"] / 1000
     parsed_time = datetime.datetime.fromtimestamp(
         time_raw).strftime("%d.%m.%Y %H:%M:%S")
@@ -65,7 +65,32 @@ def create_name(prog_data):
         date_name = str(weekdays[weekday_number]) + " " + \
             datetime.datetime.fromtimestamp(
                 time_raw).strftime("%d.%m.%Y %H:%M")
-    return prog_data['name'] + u" (" + unicode(prog_data.get('description', ''))[:20] + u"..., " + date_name + u")"
+    return prog_data['name'] + u" (" + snippet + u", " + date_name + u")"
+
+
+def parse_season_episode(description):
+    """
+    Try to parse episode and season values from a description.
+    e.g Kausi 2, 37/43. would be Season 2, episode 37
+
+    return a tuple (season, episode)
+    """
+
+    ret = re.match('^Kausi (\d+)[,\.] ?\w* ?(\d+)(?:/(\d+))?\.', description, flags=re.IGNORECASE)
+    if ret is not None:
+        return (ret.group(1), ret.group(2))
+
+    # Match thing like "5. alkaa uusin jaksoin"
+    ret = re.match('^\(?(\d+)\. kausi', description, flags=re.IGNORECASE)
+    if ret is not None:
+        return (ret.group(1), 1)
+
+    # Match thing like "UUSI KAUSI! Kausi 4"
+    ret = re.match('\(?uusi kausi\!? kausi (\d+)', description, flags=re.IGNORECASE)
+    if ret is not None:
+        return (ret.group(1), 1)
+
+    return None
 
 
 def show_dir(dirid=0):
@@ -78,23 +103,30 @@ def show_dir(dirid=0):
 
     # List recordings
     for row in data:
-        name = create_name(row)
         plot = (row['description'] if "description" in row else "N/a")\
                     .encode('utf8').replace('"', '\'\'').replace('&', '_ampersand_')\
                     .replace('<', '_lessthan_').replace('>', '_greaterthan_')
-        add_watch_link(name,
+        kwargs = {
+            "date": datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y"),
+            "aired": datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y"),
+            "duration": row['duration'],
+            "plotoutline": plot,
+            "plot": plot,
+            "playcount": (1 if row['isWatched'] else 0),
+            "iconimage": (row['thumbnail'] if "thumbnail" in row else "DefaultVideo.png"),
+        }
+        season_episode = parse_season_episode(row.get('description', ''))
+        if season_episode is not None:
+            kwargs['season'] = season_episode[0]
+            kwargs['episode'] = season_episode[1]
+            kwargs['title'] = create_name(row, "S{}E{}".format(season_episode[0], season_episode[1])).replace('"', '\'\'').replace('&', '_ampersand_').replace('<', '_lessthan_').replace('>', '_greaterthan_')
+        else:
+            kwargs['title'] = create_name(row, unicode(row.get('description', ''))[:20]).replace('"', '\'\'').replace('&', '_ampersand_').replace('<', '_lessthan_').replace('>', '_greaterthan_')
+        
+        add_watch_link(kwargs['title'],
                        row['programId'],
                        totalItems,
-                       kwargs={
-                           "title": name.replace('"', '\'\'').replace('&', '_ampersand_').replace('<', '_lessthan_').replace('>', '_greaterthan_'),
-                           "date": datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y"),
-                           "aired": datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y"),
-                           "duration": row['duration'],
-                           "plotoutline": plot,
-                           "plot": plot,
-                           "playcount": (1 if row['isWatched'] else 0),
-                           "iconimage": (row['thumbnail'] if "thumbnail" in row else "DefaultVideo.png"),
-                       })
+                       kwargs=kwargs)
 
 
 def add_dir_link(name, dirid):
