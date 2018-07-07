@@ -82,7 +82,7 @@ def create_name(prog_data):
         date_name = str(weekdays[weekday_number]) + " " + \
             datetime.datetime.fromtimestamp(
                 time_raw).strftime("%d.%m.%Y %H:%M")
-    return prog_data['name'] + " (" + prog_data['serviceName'] + ", " + date_name + ")"
+    return prog_data['name'] + " (" + date_name + ")"
 
 
 def show_dir(dirid=0):
@@ -103,12 +103,10 @@ def show_dir(dirid=0):
                            "title": name.replace('"', '\'\'').replace('&', '_ampersand_').replace('<', '_lessthan_').replace('>', '_greaterthan_'),
                            "date": datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y"),
                            "aired": datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y"),
-                           "duration": ((row["endTimeUTC"] / 1000 / 60) - (row["startTimeUTC"] / 1000 / 60)),
-                           "plotoutline": (row['description'] if "description" in row else "N/a").encode('utf8').replace('"', '\'\'').replace('&', '_ampersand_').replace('<',
-                                                                                                                                                                          '_lessthan_').replace('>', '_greaterthan_'),
-                           "plot": str((row['serviceName'] if "serviceName" in row else "N/a").encode('utf8') + '\n' +
-                                       datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y") + '          ' + str((row["endTimeUTC"] / 1000 / 60) - (row["startTimeUTC"] / 1000 / 60)) + ' min\n' +
-                                       (row['description'] if "description" in row else "N/a").encode('utf8')).replace('"', '\'\'').replace('&', '_ampersand_').replace('<', '_lessthan_').replace('>', '_greaterthan_'),
+                           "duration": row['duration'],
+                           "plotoutline": (row['description'] if "description" in row else "N/a")
+                           .encode('utf8').replace('"', '\'\'').replace('&', '_ampersand_')
+                           .replace('<', '_lessthan_').replace('>', '_greaterthan_'),
                            "playcount": (1 if row['isWatched'] else 0),
                            "iconimage": (row['thumbnail'] if "thumbnail" in row else "DefaultVideo.png"),
                        })
@@ -129,6 +127,7 @@ def add_watch_link(name, progid, totalItems=None, kwargs={}):
                            "iconimage"], thumbnailImage=kwargs["iconimage"])
     liz.setProperty('fanart_image', kwargs["iconimage"])
     liz.setInfo('video', kwargs)
+    liz.setProperty('IsPlayable', 'true')
     xbmcplugin.addDirectoryItem(handle=int(
         sys.argv[1]), url=u, listitem=liz, totalItems=totalItems)
     return liz
@@ -137,18 +136,28 @@ def add_watch_link(name, progid, totalItems=None, kwargs={}):
 def watch_program(progid=0, watch=""):
     url = elisa.getstreamuri(progid)
     kwargs = json.loads(watch)
-    listitem = xbmcgui.ListItem(kwargs["title"], iconImage=kwargs[
-                                "iconimage"], thumbnailImage=kwargs["iconimage"])
-    listitem.setInfo('video', kwargs)
-    xbmc.Player().play(url, listitem)
+    playitem = xbmcgui.ListItem(
+        kwargs["title"], iconImage=kwargs["iconimage"],
+        thumbnailImage=kwargs["iconimage"], path=url
+    )
+    playitem.setInfo('video', kwargs)
+    playitem.setMimeType('mime/x-type')
+    playitem.setContentLookup(False)
+    xbmcplugin.setResolvedUrl(int(sys.argv[1]), True, listitem=playitem)
     return True
 
 
 def mainloop():
+    elisa.set_api_key(
+        __settings__.getSetting("external_api_key"),
+        __settings__.getSetting("external_client_secret")
+    )
+
     try:
-        elisa.setsession(json.loads(__settings__.getSetting("session")))
-    except ValueError as ve:
-        __settings__.setSetting("session", "{}")
+        elisa.login_with_refresh_token(
+            __settings__.getSetting("refresh_token"))
+    except Exception as ve:
+        __settings__.setSetting("refresh_token", "{}")
 
     if not elisa.islogged():
         dialog = xbmcgui.Dialog()
@@ -159,7 +168,8 @@ def mainloop():
         username = __settings__.getSetting("username")
         password = __settings__.getSetting("password")
         elisa.login(username, password)
-        __settings__.setSetting("session", json.dumps(elisa.getsession()))
+        __settings__.setSetting(
+            "refresh_token", elisa.oauth_data['refresh_token'])
 
     params = get_params()
 
@@ -194,6 +204,7 @@ def mainloop():
     xbmcplugin.setContent(handle=int(sys.argv[1]), content="movies")
     xbmc.executebuiltin('Container.SetViewMode(504)')
     xbmcplugin.endOfDirectory(int(sys.argv[1]))
+
 
 if __name__ == '__main__':
     mainloop()

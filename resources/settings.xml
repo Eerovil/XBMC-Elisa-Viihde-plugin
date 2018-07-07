@@ -3,5 +3,7 @@
   <category label="30000">
     <setting id="username" type="text" label="30001" default="" />
     <setting id="password" type="text" option="hidden" label="30002" enable="!eq(-1,)" default="" />
+    <setting id="external_api_key" type="text" label="30018" default="" />
+    <setting id="external_client_secret" type="text" label="30019" default="" />
   </category>
 </settings>
