@@ -6,6 +6,8 @@ import datetime
 import threading
 import json
 
+from urlparse import parse_qsl
+
 # Elisa session
 elisa = None
 
@@ -42,25 +44,6 @@ except ImportError as err:
 
 # Init Elisa
 elisa = elisaviihde.elisaviihde(False)
-
-
-def get_params():
-    param = []
-    paramstring = sys.argv[2]
-    if len(paramstring) >= 2:
-        params = sys.argv[2]
-        cleanedparams = params.replace('?', '')
-        if (params[len(params) - 1] == '/'):
-            params = params[0:len(params) - 2]
-        pairsofparams = cleanedparams.split('&')
-        param = {}
-        for i in range(len(pairsofparams)):
-            splitparams = {}
-            splitparams = pairsofparams[i].split('=')
-            if (len(splitparams)) == 2:
-                param[splitparams[0]] = splitparams[1].replace('_ampersand_', '&').replace(
-                    '_lessthan_', '<').replace('_greaterthan_', '>')
-    return param
 
 
 def create_name(prog_data):
@@ -174,9 +157,11 @@ def mainloop():
         if ok == True:
             __settings__.openSettings(url=sys.argv[0])
 
+    params = {}
+    for param_tuple in parse_qsl(sys.argv[2][1:]):
+        params[param_tuple[0]] = param_tuple[1]
 
-
-    params = get_params()
+    print "params: %s" % params
 
     dirid = None
     progid = None
