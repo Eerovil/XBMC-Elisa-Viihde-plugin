@@ -46,8 +46,6 @@ elisa = elisaviihde.elisaviihde(False)
 
 def create_name(prog_data, snippet):
     time_raw = prog_data["startTimeUTC"] / 1000
-    parsed_time = datetime.datetime.fromtimestamp(
-        time_raw).strftime("%d.%m.%Y %H:%M:%S")
     weekday_number = int(
         datetime.datetime.fromtimestamp(time_raw).strftime("%w"))
     prog_date = datetime.date.fromtimestamp(time_raw)
@@ -103,8 +101,12 @@ def show_dir(dirid=0):
     for row in data:
         plot = escape(row['description'] if "description" in row else "N/a")
         kwargs = {
-            "date": datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y"),
-            "aired": datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y"),
+            "date": datetime.datetime.fromtimestamp(
+                row["startTimeUTC"] / 1000
+            ).strftime("%d.%m.%Y"),
+            "aired": datetime.datetime.fromtimestamp(
+                row["startTimeUTC"] / 1000
+            ).strftime("%d.%m.%Y"),
             "duration": row['duration'],
             "plotoutline": plot,
             "plot": plot,
@@ -171,7 +173,7 @@ def mainloop():
     try:
         elisa.login_with_refresh_token(
             __settings__.getSetting("refresh_token"))
-    except Exception as ve:
+    except Exception:  # TODO: Maybe catch a HTTPResponse related error here
         __settings__.setSetting("refresh_token", "{}")
 
         # Logging in with refresh_token failed, try with user/pass
@@ -184,7 +186,7 @@ def mainloop():
     if not elisa.islogged():
         dialog = xbmcgui.Dialog()
         ok = dialog.ok('XBMC', __language__(30003), __language__(30004))
-        if ok == True:
+        if ok:
             __settings__.openSettings(url=sys.argv[0])
 
     params = {}
@@ -193,31 +195,12 @@ def mainloop():
 
     print "params: %s" % params
 
-    dirid = None
-    progid = None
-    watch = None
-
-    try:
-        dirid = int(params["dirid"])
-    except:
-        pass
-
-    try:
-        progid = int(params["progid"])
-    except:
-        pass
-
-    try:
-        watch = str(params["watch"])
-    except:
-        pass
-
-    if dirid == None and progid == None:
+    if 'dirid' not in params and 'progid' not in params:
         show_dir(0)
-    elif progid == None and dirid != None:
-        show_dir(dirid)
-    elif watch != None and progid != None:
-        watch_program(progid, watch)
+    elif 'progid' not in params and 'dirid' in params:
+        show_dir(int(params['dirid']))
+    elif 'watch' in params and 'progid' in params:
+        watch_program(int(params['progid']), params['watch'])
     else:
         show_dir(0)
 
