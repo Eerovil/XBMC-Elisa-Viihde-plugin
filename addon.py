@@ -1,10 +1,10 @@
 import re
-import os
 import sys
-import time
 import datetime
-import threading
 import json
+from cgi import escape
+
+from urlparse import parse_qsl
 
 # Elisa session
 elisa = None
@@ -44,29 +44,8 @@ except ImportError as err:
 elisa = elisaviihde.elisaviihde(False)
 
 
-def get_params():
-    param = []
-    paramstring = sys.argv[2]
-    if len(paramstring) >= 2:
-        params = sys.argv[2]
-        cleanedparams = params.replace('?', '')
-        if (params[len(params) - 1] == '/'):
-            params = params[0:len(params) - 2]
-        pairsofparams = cleanedparams.split('&')
-        param = {}
-        for i in range(len(pairsofparams)):
-            splitparams = {}
-            splitparams = pairsofparams[i].split('=')
-            if (len(splitparams)) == 2:
-                param[splitparams[0]] = splitparams[1].replace('_ampersand_', '&').replace(
-                    '_lessthan_', '<').replace('_greaterthan_', '>')
-    return param
-
-
-def create_name(prog_data):
+def create_name(prog_data, snippet):
     time_raw = prog_data["startTimeUTC"] / 1000
-    parsed_time = datetime.datetime.fromtimestamp(
-        time_raw).strftime("%d.%m.%Y %H:%M:%S")
     weekday_number = int(
         datetime.datetime.fromtimestamp(time_raw).strftime("%w"))
     prog_date = datetime.date.fromtimestamp(time_raw)
@@ -82,7 +61,32 @@ def create_name(prog_data):
         date_name = str(weekdays[weekday_number]) + " " + \
             datetime.datetime.fromtimestamp(
                 time_raw).strftime("%d.%m.%Y %H:%M")
-    return prog_data['name'] + u" (" + unicode(prog_data.get('description', ''))[:20] + u"..., " + date_name + u")"
+    return prog_data['name'] + u" (" + snippet + u", " + date_name + u")"
+
+
+def parse_season_episode(description):
+    """
+    Try to parse episode and season values from a description.
+    e.g Kausi 2, 37/43. would be Season 2, episode 37
+
+    return a tuple (season, episode)
+    """
+
+    ret = re.match('^Kausi (\d+)[,\.] ?\w* ?(\d+)(?:/(\d+))?\.', description, flags=re.IGNORECASE)
+    if ret is not None:
+        return (ret.group(1), ret.group(2))
+
+    # Match thing like "5. alkaa uusin jaksoin"
+    ret = re.match('^\(?(\d+)\. kausi', description, flags=re.IGNORECASE)
+    if ret is not None:
+        return (ret.group(1), 1)
+
+    # Match thing like "UUSI KAUSI! Kausi 4"
+    ret = re.match('\(?uusi kausi\!? kausi (\d+)', description, flags=re.IGNORECASE)
+    if ret is not None:
+        return (ret.group(1), 1)
+
+    return None
 
 
 def show_dir(dirid=0):
@@ -95,23 +99,34 @@ def show_dir(dirid=0):
 
     # List recordings
     for row in data:
-        name = create_name(row)
-        plot = (row['description'] if "description" in row else "N/a")\
-                    .encode('utf8').replace('"', '\'\'').replace('&', '_ampersand_')\
-                    .replace('<', '_lessthan_').replace('>', '_greaterthan_')
-        add_watch_link(name,
+        plot = escape(row['description'] if "description" in row else "N/a")
+        kwargs = {
+            "date": datetime.datetime.fromtimestamp(
+                row["startTimeUTC"] / 1000
+            ).strftime("%d.%m.%Y"),
+            "aired": datetime.datetime.fromtimestamp(
+                row["startTimeUTC"] / 1000
+            ).strftime("%d.%m.%Y"),
+            "duration": row['duration'],
+            "plotoutline": plot,
+            "plot": plot,
+            "playcount": (1 if row['isWatched'] else 0),
+            "iconimage": (row['thumbnail'] if "thumbnail" in row else "DefaultVideo.png"),
+        }
+        season_episode = parse_season_episode(row.get('description', ''))
+        if season_episode is not None:
+            kwargs['season'] = season_episode[0]
+            kwargs['episode'] = season_episode[1]
+            kwargs['title'] = escape(create_name(
+                row, "S{}E{}".format(season_episode[0], season_episode[1])
+            ))
+        else:
+            kwargs['title'] = escape(create_name(row, unicode(row.get('description', ''))[:20]))
+
+        add_watch_link(kwargs['title'],
                        row['programId'],
                        totalItems,
-                       kwargs={
-                           "title": name.replace('"', '\'\'').replace('&', '_ampersand_').replace('<', '_lessthan_').replace('>', '_greaterthan_'),
-                           "date": datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y"),
-                           "aired": datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y"),
-                           "duration": row['duration'],
-                           "plotoutline": plot,
-                           "plot": plot,
-                           "playcount": (1 if row['isWatched'] else 0),
-                           "iconimage": (row['thumbnail'] if "thumbnail" in row else "DefaultVideo.png"),
-                       })
+                       kwargs=kwargs)
 
 
 def add_dir_link(name, dirid):
@@ -158,48 +173,34 @@ def mainloop():
     try:
         elisa.login_with_refresh_token(
             __settings__.getSetting("refresh_token"))
-    except Exception as ve:
+    except Exception:  # TODO: Maybe catch a HTTPResponse related error here
         __settings__.setSetting("refresh_token", "{}")
 
-    if not elisa.islogged():
-        dialog = xbmcgui.Dialog()
-        ok = dialog.ok('XBMC', __language__(30003), __language__(30004))
-        if ok == True:
-            __settings__.openSettings(url=sys.argv[0])
-
+        # Logging in with refresh_token failed, try with user/pass
         username = __settings__.getSetting("username")
         password = __settings__.getSetting("password")
         elisa.login(username, password)
         __settings__.setSetting(
             "refresh_token", elisa.oauth_data['refresh_token'])
 
-    params = get_params()
+    if not elisa.islogged():
+        dialog = xbmcgui.Dialog()
+        ok = dialog.ok('XBMC', __language__(30003), __language__(30004))
+        if ok:
+            __settings__.openSettings(url=sys.argv[0])
 
-    dirid = None
-    progid = None
-    watch = None
+    params = {}
+    for param_tuple in parse_qsl(sys.argv[2][1:]):
+        params[param_tuple[0]] = param_tuple[1]
 
-    try:
-        dirid = int(params["dirid"])
-    except:
-        pass
+    print "params: %s" % params
 
-    try:
-        progid = int(params["progid"])
-    except:
-        pass
-
-    try:
-        watch = str(params["watch"])
-    except:
-        pass
-
-    if dirid == None and progid == None:
+    if 'dirid' not in params and 'progid' not in params:
         show_dir(0)
-    elif progid == None and dirid != None:
-        show_dir(dirid)
-    elif watch != None and progid != None:
-        watch_program(progid, watch)
+    elif 'progid' not in params and 'dirid' in params:
+        show_dir(int(params['dirid']))
+    elif 'watch' in params and 'progid' in params:
+        watch_program(int(params['progid']), params['watch'])
     else:
         show_dir(0)
 
