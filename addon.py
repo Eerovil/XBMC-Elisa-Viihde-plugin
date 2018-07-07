@@ -1,10 +1,8 @@
 import re
-import os
 import sys
-import time
 import datetime
-import threading
 import json
+from cgi import escape
 
 from urlparse import parse_qsl
 
@@ -103,9 +101,7 @@ def show_dir(dirid=0):
 
     # List recordings
     for row in data:
-        plot = (row['description'] if "description" in row else "N/a")\
-                    .encode('utf8').replace('"', '\'\'').replace('&', '_ampersand_')\
-                    .replace('<', '_lessthan_').replace('>', '_greaterthan_')
+        plot = escape(row['description'] if "description" in row else "N/a")
         kwargs = {
             "date": datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y"),
             "aired": datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y"),
@@ -119,10 +115,12 @@ def show_dir(dirid=0):
         if season_episode is not None:
             kwargs['season'] = season_episode[0]
             kwargs['episode'] = season_episode[1]
-            kwargs['title'] = create_name(row, "S{}E{}".format(season_episode[0], season_episode[1])).replace('"', '\'\'').replace('&', '_ampersand_').replace('<', '_lessthan_').replace('>', '_greaterthan_')
+            kwargs['title'] = escape(create_name(
+                row, "S{}E{}".format(season_episode[0], season_episode[1])
+            ))
         else:
-            kwargs['title'] = create_name(row, unicode(row.get('description', ''))[:20]).replace('"', '\'\'').replace('&', '_ampersand_').replace('<', '_lessthan_').replace('>', '_greaterthan_')
-        
+            kwargs['title'] = escape(create_name(row, unicode(row.get('description', ''))[:20]))
+
         add_watch_link(kwargs['title'],
                        row['programId'],
                        totalItems,
