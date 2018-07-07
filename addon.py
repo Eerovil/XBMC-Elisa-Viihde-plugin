@@ -82,7 +82,7 @@ def create_name(prog_data):
         date_name = str(weekdays[weekday_number]) + " " + \
             datetime.datetime.fromtimestamp(
                 time_raw).strftime("%d.%m.%Y %H:%M")
-    return prog_data['name'] + " (" + date_name + ")"
+    return prog_data['name'] + u" (" + unicode(prog_data.get('description', ''))[:20] + u"..., " + date_name + u")"
 
 
 def show_dir(dirid=0):
@@ -96,6 +96,9 @@ def show_dir(dirid=0):
     # List recordings
     for row in data:
         name = create_name(row)
+        plot = (row['description'] if "description" in row else "N/a")\
+                    .encode('utf8').replace('"', '\'\'').replace('&', '_ampersand_')\
+                    .replace('<', '_lessthan_').replace('>', '_greaterthan_')
         add_watch_link(name,
                        row['programId'],
                        totalItems,
@@ -104,9 +107,8 @@ def show_dir(dirid=0):
                            "date": datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y"),
                            "aired": datetime.datetime.fromtimestamp(row["startTimeUTC"] / 1000).strftime("%d.%m.%Y"),
                            "duration": row['duration'],
-                           "plotoutline": (row['description'] if "description" in row else "N/a")
-                           .encode('utf8').replace('"', '\'\'').replace('&', '_ampersand_')
-                           .replace('<', '_lessthan_').replace('>', '_greaterthan_'),
+                           "plotoutline": plot,
+                           "plot": plot,
                            "playcount": (1 if row['isWatched'] else 0),
                            "iconimage": (row['thumbnail'] if "thumbnail" in row else "DefaultVideo.png"),
                        })
