@@ -190,8 +190,10 @@ def mainloop():
             __settings__.openSettings(url=sys.argv[0])
 
     params = {}
-    for param_tuple in parse_qsl(sys.argv[2][1:]):
-        params[param_tuple[0]] = param_tuple[1]
+    # parse_qsl doesn't like the & character so let's replace it with the unicode version,
+    # switching back after parsing.
+    for param_tuple in parse_qsl(sys.argv[2][1:].replace('&amp;', '/u0026')):
+        params[param_tuple[0]] = param_tuple[1].replace('/u0026', '&amp;')
 
     print "params: %s" % params
 
